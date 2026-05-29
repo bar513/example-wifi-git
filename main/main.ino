@@ -4,7 +4,7 @@
 #include <HTTPUpdate.h>
 
 // 1. Set your current version tag (Must match your GitHub Release Tag exactly, e.g., "v1.0")
-const String CURRENT_VERSION = "v2.0"; 
+const String CURRENT_VERSION = "v2.1"; 
 
 // 2. Replace with your GitHub Username and Repository Name
 const String GITHUB_USER = "bar513";
