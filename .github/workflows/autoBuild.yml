@@ -1,0 +1,46 @@
+name: Compile ESP32 Firmware and Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers the automation whenever you push a tag starting with 'v' (e.g., v1.0, v1.1)
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Checkout the repository code
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # 2. Set up the Arduino CLI environment
+    - name: Setup Arduino CLI
+      uses: arduino/setup-arduino-cli@v2
+
+    # 3. Install the ESP32 Board Core and dependencies
+    - name: Install ESP32 Platform and Libraries
+      run: |
+        arduino-cli core update-index
+        arduino-cli core install esp32:esp32
+        # Installs WiFiManager automatically during the cloud build
+        arduino-cli lib install "WiFiManager"
+
+    # 4. Compile the sketch from your 'main' directory
+    - name: Compile Sketch
+      run: |
+        arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir ./build ./main
+
+    # 5. Rename the binary to match what your ESP32 looks for
+    - name: Rename Binary File
+      run: |
+        mv ./build/main.ino.bin ./build/firmware.bin
+
+    # 6. Create the GitHub Release and upload the firmware.bin automatically
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ./build/firmware.bin
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
