@@ -21,51 +21,37 @@ void checkForUpdates() {
 
   HTTPClient http;
   
-  // 1. Tell the ESP32 NOT to follow the redirect automatically...
-  http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS); 
-  
-  // 2. ⚠️ CRUCIAL FIX: Tell the ESP32 to collect and remember the Location header!
-  const char* headerKeys[] = {"Location"};
-  http.collectHeaders(headerKeys, 1);
+  // 1. 🚀 CHANGE: Tell the ESP32 to automatically follow GitHub's redirects
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); 
   
   http.begin(client, firmwareUrl);
-  int httpCode = http.GET();
   
-  // 3. Read where GitHub wants to redirect us
-  String locationHeader = http.header("Location");
-  http.end();
+  // 2. We send a HEAD request instead of GET. 
+  // This checks if the file exists and gets its size without downloading the whole binary yet.
+  int httpCode = http.sendRequest("HEAD"); 
 
-  Serial.print("GitHub responded with HTTP Code: "); Serial.println(httpCode);
+  Serial.print("GitHub final response HTTP Code: "); Serial.println(httpCode);
 
-  // If it's a 302 Redirect, we successfully found the asset path!
-  if (httpCode == 302 && locationHeader.length() > 0) {
-    Serial.print("Redirect URL found: "); Serial.println(locationHeader);
+  // HTTP 200 means the redirect was followed successfully and the file is sitting there ready
+  if (httpCode == HTTP_CODE_OK) {
+    int fileSize = http.getSize();
+    Serial.printf("Success! Found latest firmware asset. Size: %d bytes\n", fileSize);
     
-    // Extract the version tag (e.g., v2.0) from the redirect URL
-    int tagIndex = locationHeader.indexOf("/tags/");
-    if (tagIndex != -1) {
-      String latestVersion = locationHeader.substring(tagIndex + 6);
-      latestVersion = latestVersion.substring(0, latestVersion.indexOf("/"));
-      
-      Serial.print("Current firmware version: "); Serial.println(CURRENT_VERSION);
-      Serial.print("Latest release on GitHub: "); Serial.println(latestVersion);
+    // Since we are forcing a check only on reboot/reset, we assume if a published
+    // release binary exists on GitHub, we want to flash it.
+    Serial.println("Starting OTA Update execution...");
+    
+    // This line downloads, flashes, and auto-reboots the ESP32
+    t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl);
 
-      if (latestVersion != CURRENT_VERSION) {
-        Serial.println("New release detected! Upgrading firmware now...");
-        
-        // This execution automatically follows the redirect chain to download and flash the file
-        t_httpUpdate_return ret = httpUpdate.update(client, firmwareUrl);
-
-        if (ret == HTTP_UPDATE_FAILED) {
-          Serial.printf("OTA failed. Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
-        }
-      } else {
-        Serial.println("Your ESP32 is already running the latest release.");
-      }
+    if (ret == HTTP_UPDATE_FAILED) {
+      Serial.printf("OTA failed. Error (%d): %s\n", httpUpdate.getLastError(), httpUpdate.getLastErrorString().c_str());
     }
   } else {
-    Serial.printf("Could not resolve latest release. Expected 302, got HTTP Code: %d\n", httpCode);
+    Serial.printf("Could not resolve latest release asset. Got HTTP Code: %d\n", httpCode);
   }
+  
+  http.end();
 }
 
 void setup() {
